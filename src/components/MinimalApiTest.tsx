@@ -39,7 +39,7 @@ export default function MinimalApiTest() {
         setResponse(null);
 
         try {
-            const response = await fetch('/api/debug-env');
+            const response = await fetch('/api/test-env');
 
             if (!response.ok) {
                 const errorData = await response.text();

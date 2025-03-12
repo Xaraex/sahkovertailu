@@ -1,106 +1,166 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { fetchConsumption, fetchProduction, fetchCO2EmissionsConsumption, fetchUpRegulationPrice } from '@/lib/api/fingrid';
-import { TimeWindow, FingridDataPoint, FingridResponse } from '@/lib/constants/datasets';
+import { TimeWindow, FingridDataPoint } from '@/lib/constants/datasets';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { formatDate } from '@/lib/utils/date';
-import { calculateAveragePrice, formatPrice, formatPricePerKwh } from '@/lib/utils/price';
+import { formatPricePerKwh } from '@/lib/utils/price';
 import { Zap, Activity, AlertCircle, RefreshCw, Wind, Cpu, Info, Clock } from 'lucide-react';
+
+// Cache data in memory
+const cache: Record<string, { data: any, timestamp: number }> = {};
+const CACHE_DURATION = 60 * 60 * 1000; // 1 hour in milliseconds
 
 export default function ApiTest() {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [consumption, setConsumption] = useState<FingridDataPoint[]>([]);
-    const [production, setProduction] = useState<FingridDataPoint[]>([]);
-    const [co2Emissions, setCo2Emissions] = useState<FingridDataPoint[]>([]);
-    const [regulationPrice, setRegulationPrice] = useState<FingridDataPoint[]>([]);
+    const [data, setData] = useState<{
+        consumption: FingridDataPoint[] | null,
+        production: FingridDataPoint[] | null,
+        co2Emissions: FingridDataPoint[] | null,
+        regulationPrice: FingridDataPoint[] | null
+    }>({
+        consumption: null,
+        production: null,
+        co2Emissions: null,
+        regulationPrice: null
+    });
     const [timeWindow, setTimeWindow] = useState<TimeWindow>(TimeWindow.DAY);
     const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
     const [rateInfo, setRateInfo] = useState<string | null>(null);
 
-    // Fetch a single dataset with rate limit handling
-    const fetchDataset = async (
-        fetchFunction: () => Promise<FingridResponse>,
-        setter: (data: FingridDataPoint[]) => void,
-        datasetName: string
-    ) => {
-        try {
-            const response = await fetchFunction();
-            console.log(`Successfully fetched ${datasetName} data`);
-            setter(response.data || []);
-            return true;
-        } catch (err) {
-            console.error(`Error fetching ${datasetName} data:`, err);
-
-            // Check for rate limit error
-            const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-            if (errorMessage.includes('429') || errorMessage.includes('rate limit')) {
-                setRateInfo(`Rate limit exceeded, some data may be unavailable`);
-                // Don't set error, just return false to indicate failure
-                return false;
-            }
-
-            return false;
-        }
-    };
-
+    // Fetch all data in a single API call
     const fetchData = async () => {
         setLoading(true);
         setError(null);
         setRateInfo(null);
 
+        // Create a cache key based on the time window
+        const cacheKey = `all-data-${timeWindow}`;
+
+        // Check if we have cached data
+        if (cache[cacheKey]) {
+            const now = Date.now();
+            if (now - cache[cacheKey].timestamp < CACHE_DURATION) {
+                // Use cached data if it's still valid
+                console.log('Using cached data');
+                setData(cache[cacheKey].data);
+                setLastUpdated(new Date(cache[cacheKey].timestamp));
+                setLoading(false);
+                return;
+            }
+        }
+
         try {
-            // Fetch data sequentially to avoid rate limits
-            let success = true;
+            // Get time range parameters
+            const now = new Date();
+            let startDate = new Date(now);
 
-            // Try to fetch all datasets, but don't fail completely if one fails
-            const consumptionSuccess = await fetchDataset(
-                () => fetchConsumption(timeWindow),
-                setConsumption,
-                'consumption'
-            );
-            success = success && consumptionSuccess;
-
-            // Wait a bit between requests to avoid rate limits
-            await new Promise(resolve => setTimeout(resolve, 500));
-
-            const productionSuccess = await fetchDataset(
-                () => fetchProduction(timeWindow),
-                setProduction,
-                'production'
-            );
-            success = success && productionSuccess;
-
-            await new Promise(resolve => setTimeout(resolve, 500));
-
-            const co2Success = await fetchDataset(
-                () => fetchCO2EmissionsConsumption(timeWindow),
-                setCo2Emissions,
-                'CO2 emissions'
-            );
-            success = success && co2Success;
-
-            await new Promise(resolve => setTimeout(resolve, 500));
-
-            const priceSuccess = await fetchDataset(
-                () => fetchUpRegulationPrice(timeWindow),
-                setRegulationPrice,
-                'regulation price'
-            );
-            success = success && priceSuccess;
-
-            if (!success && !rateInfo) {
-                setRateInfo('Some data could not be fetched due to API rate limits. Try again later.');
+            switch (timeWindow) {
+                case TimeWindow.DAY:
+                    startDate.setDate(startDate.getDate() - 1);
+                    break;
+                case TimeWindow.WEEK:
+                    startDate.setDate(startDate.getDate() - 7);
+                    break;
+                case TimeWindow.MONTH:
+                    startDate.setMonth(startDate.getMonth() - 1);
+                    break;
+                default:
+                    startDate.setDate(startDate.getDate() - 1);
             }
 
-            // Set last updated timestamp
-            setLastUpdated(new Date());
+            const startTime = encodeURIComponent(startDate.toISOString());
+            const endTime = encodeURIComponent(now.toISOString());
+
+            // Define dataset IDs
+            const datasets = [
+                { id: 193, key: 'consumption' },    // Consumption
+                { id: 192, key: 'production' },     // Production
+                { id: 265, key: 'co2Emissions' },   // CO2
+                { id: 244, key: 'regulationPrice' } // Price
+            ];
+
+            // Prepare data structure matching our state type
+            const newData = {
+                consumption: null as FingridDataPoint[] | null,
+                production: null as FingridDataPoint[] | null,
+                co2Emissions: null as FingridDataPoint[] | null,
+                regulationPrice: null as FingridDataPoint[] | null
+            };
+
+            let hasData = false;
+            let hasError = false;
+
+            // Process each dataset one by one to avoid rate limits
+            for (const dataset of datasets) {
+                try {
+                    const latestUrl = `/api/fingrid/datasets/${dataset.id}/data/latest`;
+                    console.log(`Fetching ${dataset.key} data from: ${latestUrl}`);
+
+                    const response = await fetch(latestUrl);
+
+                    if (!response.ok) {
+                        console.error(`Error fetching ${dataset.key} data: ${response.status}`);
+                        if (response.status === 429) {
+                            setRateInfo('Rate limit exceeded. Using cached data if available.');
+                            hasError = true;
+                            break;
+                        }
+                        continue;
+                    }
+
+                    const latestData = await response.json();
+
+                    // Convert to FingridDataPoint format and update specific data property
+                    newData[dataset.key as keyof typeof newData] = [{
+                        value: latestData.value,
+                        start_time: latestData.startTime,
+                        end_time: latestData.endTime
+                    }];
+
+                    hasData = true;
+                } catch (err) {
+                    console.error(`Error fetching ${dataset.key}:`, err);
+                }
+
+                // Wait a bit between requests to avoid rate limits
+                await new Promise(resolve => setTimeout(resolve, 1000));
+            }
+
+            if (!hasData && hasError) {
+                // If we have a cache entry, use it instead
+                if (cache[cacheKey]) {
+                    setData(cache[cacheKey].data);
+                    setLastUpdated(new Date(cache[cacheKey].timestamp));
+                    setRateInfo('Using cached data due to rate limits.');
+                } else {
+                    setError('No data could be fetched and no cached data available.');
+                }
+            } else if (hasData) {
+                // Update state and cache the new data
+                setData(newData);
+
+                // Cache the results
+                cache[cacheKey] = {
+                    data: newData,
+                    timestamp: Date.now()
+                };
+
+                setLastUpdated(new Date());
+            }
         } catch (err) {
             console.error('Error in fetchData:', err);
             setError(err instanceof Error ? err.message : 'Tuntematon virhe tapahtui');
+
+            // Try to use cached data if available
+            if (cache[cacheKey]) {
+                setData(cache[cacheKey].data);
+                setLastUpdated(new Date(cache[cacheKey].timestamp));
+                setRateInfo('Using cached data due to error.');
+            }
         } finally {
             setLoading(false);
         }
@@ -115,8 +175,6 @@ export default function ApiTest() {
         fetchData();
     };
 
-    const averagePrice = calculateAveragePrice(regulationPrice);
-
     return (
         <Card className="w-full max-w-4xl mx-auto">
             <CardHeader>
@@ -124,7 +182,7 @@ export default function ApiTest() {
                     <div>
                         <CardTitle>Fingrid API-tiedot</CardTitle>
                         <CardDescription>
-                            Reaaliaikainen sähködata Fingrid API:sta
+                            Sähködata Fingrid API:sta
                         </CardDescription>
                     </div>
                     <Button
@@ -163,7 +221,7 @@ export default function ApiTest() {
                         <div>
                             <p className="text-sm text-amber-800 dark:text-amber-300">{rateInfo}</p>
                             <p className="text-xs text-amber-700 dark:text-amber-400 mt-1">
-                                Fingrid API-avaimesi sallii 10 pyyntöä minuutissa. Odota hetki ja kokeile uudelleen.
+                                Fingrid API-avaimesi sallii 10 pyyntöä minuutissa. Tietoja päivitetään harkitusti.
                             </p>
                         </div>
                     </div>
@@ -198,22 +256,22 @@ export default function ApiTest() {
                             </div>
                         ) : (
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                {/* Consumption */}
                                 <div className="bg-card rounded-lg border p-4">
                                     <div className="flex items-center gap-2 mb-3">
                                         <Zap className="h-5 w-5 text-primary" />
                                         <h3 className="font-medium">Sähkön kulutus</h3>
                                     </div>
-                                    {consumption && consumption.length > 0 ? (
+                                    {data.consumption && data.consumption.length > 0 ? (
                                         <div>
-                                            <p className="text-sm mb-1 text-muted-foreground">Datapisteiden määrä: {consumption.length}</p>
                                             <div className="mt-3 space-y-1">
                                                 <p className="font-medium">Viimeisin kulutus:
                                                     <span className="ml-2 text-energy-blue-600 dark:text-energy-blue-400 font-bold">
-                                                        {consumption[consumption.length - 1].value.toLocaleString('fi-FI')} MW
+                                                        {data.consumption[0].value.toLocaleString('fi-FI')} MW
                                                     </span>
                                                 </p>
                                                 <p className="text-sm text-muted-foreground">
-                                                    {formatDate(consumption[consumption.length - 1].start_time)}
+                                                    {formatDate(data.consumption[0].start_time)}
                                                 </p>
                                             </div>
                                         </div>
@@ -222,22 +280,22 @@ export default function ApiTest() {
                                     )}
                                 </div>
 
+                                {/* Production */}
                                 <div className="bg-card rounded-lg border p-4">
                                     <div className="flex items-center gap-2 mb-3">
                                         <Cpu className="h-5 w-5 text-primary" />
                                         <h3 className="font-medium">Sähkön tuotanto</h3>
                                     </div>
-                                    {production && production.length > 0 ? (
+                                    {data.production && data.production.length > 0 ? (
                                         <div>
-                                            <p className="text-sm mb-1 text-muted-foreground">Datapisteiden määrä: {production.length}</p>
                                             <div className="mt-3 space-y-1">
                                                 <p className="font-medium">Viimeisin tuotanto:
                                                     <span className="ml-2 text-energy-green-600 dark:text-energy-green-400 font-bold">
-                                                        {production[production.length - 1].value.toLocaleString('fi-FI')} MW
+                                                        {data.production[0].value.toLocaleString('fi-FI')} MW
                                                     </span>
                                                 </p>
                                                 <p className="text-sm text-muted-foreground">
-                                                    {formatDate(production[production.length - 1].start_time)}
+                                                    {formatDate(data.production[0].start_time)}
                                                 </p>
                                             </div>
                                         </div>
@@ -246,22 +304,22 @@ export default function ApiTest() {
                                     )}
                                 </div>
 
+                                {/* CO2 Emissions */}
                                 <div className="bg-card rounded-lg border p-4">
                                     <div className="flex items-center gap-2 mb-3">
                                         <Wind className="h-5 w-5 text-primary" />
                                         <h3 className="font-medium">CO2-päästökerroin</h3>
                                     </div>
-                                    {co2Emissions && co2Emissions.length > 0 ? (
+                                    {data.co2Emissions && data.co2Emissions.length > 0 ? (
                                         <div>
-                                            <p className="text-sm mb-1 text-muted-foreground">Datapisteiden määrä: {co2Emissions.length}</p>
                                             <div className="mt-3 space-y-1">
                                                 <p className="font-medium">Viimeisin arvo:
                                                     <span className="ml-2 text-energy-green-600 dark:text-energy-green-400 font-bold">
-                                                        {co2Emissions[co2Emissions.length - 1].value.toLocaleString('fi-FI')} gCO2/kWh
+                                                        {data.co2Emissions[0].value.toLocaleString('fi-FI')} gCO2/kWh
                                                     </span>
                                                 </p>
                                                 <p className="text-sm text-muted-foreground">
-                                                    {formatDate(co2Emissions[co2Emissions.length - 1].start_time)}
+                                                    {formatDate(data.co2Emissions[0].start_time)}
                                                 </p>
                                             </div>
                                         </div>
@@ -270,27 +328,22 @@ export default function ApiTest() {
                                     )}
                                 </div>
 
+                                {/* Regulation Price */}
                                 <div className="bg-card rounded-lg border p-4">
                                     <div className="flex items-center gap-2 mb-3">
                                         <Activity className="h-5 w-5 text-primary" />
                                         <h3 className="font-medium">Säätösähkön ylössäätöhinta</h3>
                                     </div>
-                                    {regulationPrice && regulationPrice.length > 0 ? (
+                                    {data.regulationPrice && data.regulationPrice.length > 0 ? (
                                         <div>
-                                            <p className="text-sm mb-1 text-muted-foreground">Datapisteiden määrä: {regulationPrice.length}</p>
                                             <div className="mt-3 space-y-1">
                                                 <p className="font-medium">Viimeisin hinta:
                                                     <span className="ml-2 text-energy-blue-600 dark:text-energy-blue-400 font-bold">
-                                                        {formatPricePerKwh(regulationPrice[regulationPrice.length - 1].value)}
-                                                    </span>
-                                                </p>
-                                                <p className="font-medium">Keskihinta:
-                                                    <span className="ml-2 text-energy-blue-600 dark:text-energy-blue-400 font-bold">
-                                                        {formatPricePerKwh(averagePrice)}
+                                                        {formatPricePerKwh(data.regulationPrice[0].value)}
                                                     </span>
                                                 </p>
                                                 <p className="text-sm text-muted-foreground">
-                                                    {formatDate(regulationPrice[regulationPrice.length - 1].start_time)}
+                                                    {formatDate(data.regulationPrice[0].start_time)}
                                                 </p>
                                             </div>
                                         </div>

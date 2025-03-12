@@ -1,159 +1,128 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+// Simple in-memory cache with expiration
+const cache: Record<string, { data: any, timestamp: number }> = {};
+
+// Function to get cache key from request
+function getCacheKey(path: string[], queryParams: string): string {
+    return `${path.join('/')}${queryParams}`;
+}
+
+// Function to check if cache is valid
+function getCachedResponse(key: string, maxAgeSeconds: number = 600): any | null {
+    const entry = cache[key];
+    if (!entry) return null;
+
+    const ageMs = Date.now() - entry.timestamp;
+    if (ageMs > maxAgeSeconds * 1000) return null;
+
+    return entry.data;
+}
+
 export async function GET(
     request: NextRequest,
     { params }: { params: { path: string[] } }
 ) {
     try {
         // Get the path from the request
-        const originalPath = params.path ? params.path.join('/') : '';
-        console.log('Requested path:', originalPath);
-
-        // Get API key - with careful error handling
-        let apiKey = '';
-        try {
-            apiKey = process.env.FINGRID_API_KEY || '';
-            console.log('API key length:', apiKey.length);
-        } catch (envError) {
-            console.error('Error accessing environment variables:', envError);
-            return NextResponse.json(
-                {
-                    error: 'Error accessing environment variables',
-                    message: 'There was a problem accessing the API key. Check server logs.'
-                },
-                { status: 500 }
-            );
-        }
-
-        // Check for API key presence
-        if (!apiKey || apiKey.length === 0) {
-            console.error("Fingrid API key is missing from environment variables");
-            return NextResponse.json(
-                {
-                    error: 'API key is not configured',
-                    message: 'API key is not configured on the server. Check your .env.local file and restart the server.'
-                },
-                { status: 500 }
-            );
-        }
+        const path = params.path || [];
+        const originalPath = path.join('/');
 
         // Get query parameters from the incoming request
         const url = new URL(request.url);
         const queryParams = url.search || '';
 
-        // Determine the correct endpoint path
-        let finalPath = originalPath;
+        // Create a cache key based on the full request
+        const cacheKey = getCacheKey(path, queryParams);
 
-        // If the path starts with 'datasets' and ends with 'data/latest', it's for latest data
-        // If it starts with 'datasets' and ends with 'data', it's for historical data
-        // Otherwise, use the original path
+        // Set cache duration based on endpoint type
+        // - Notifications: 10 minutes
+        // - Latest data: 5 minutes
+        // - Historical data: 30 minutes (this data doesn't change for past dates)
+        let cacheDuration = 600; // Default: 10 minutes
 
-        // Build the Fingrid API URL
-        const fingridUrl = `https://data.fingrid.fi/api/${finalPath}${queryParams}`;
-        console.log(`Making request to Fingrid API: ${fingridUrl}`);
+        if (originalPath.includes('data/latest')) {
+            cacheDuration = 300; // 5 minutes for latest data
+        } else if (originalPath.includes('/data') && queryParams.includes('start_time')) {
+            cacheDuration = 1800; // 30 minutes for historical data
+        }
 
-        try {
-            // Make request to Fingrid API with proper error handling
-            const fingridResponse = await fetch(
-                fingridUrl,
-                {
-                    headers: {
-                        'x-api-key': apiKey,
-                        'Accept': 'application/json',
-                        'Cache-Control': 'no-cache'
-                    },
-                }
-            );
+        // Check if we have a cached response
+        const cachedData = getCachedResponse(cacheKey, cacheDuration);
+        if (cachedData) {
+            console.log(`[API] Cache hit for ${originalPath}${queryParams} (age: ${(Date.now() - cachedData.timestamp) / 1000}s)`);
+            return NextResponse.json(cachedData.data);
+        }
 
-            console.log('Fingrid response status:', fingridResponse.status);
-
-            // Log headers in a TypeScript-compatible way
-            const headerObj: Record<string, string> = {};
-            // Use forEach instead of [...entries()] to avoid TypeScript downlevel iteration errors
-            fingridResponse.headers.forEach((value, key) => {
-                headerObj[key] = value;
-            });
-            console.log('Fingrid response headers:', headerObj);
-
-            // If the response wasn't ok, handle error properly
-            if (!fingridResponse.ok) {
-                let errorMessage = '';
-
-                try {
-                    // Try to get error text
-                    errorMessage = await fingridResponse.text();
-                    console.error(`Fingrid API error (${fingridResponse.status}):`, errorMessage);
-                } catch (textError) {
-                    errorMessage = 'Could not read error response';
-                    console.error('Error reading error response:', textError);
-                }
-
-                // Always return a properly formatted JSON response
-                return NextResponse.json(
-                    {
-                        error: 'Failed to fetch data from Fingrid API',
-                        status: fingridResponse.status,
-                        message: errorMessage
-                    },
-                    { status: fingridResponse.status }
-                );
-            }
-
-            // Get the data from the response safely
-            try {
-                const text = await fingridResponse.text();
-
-                // Debug the response
-                console.log('Response text preview:', text.substring(0, 100));
-
-                let data;
-                try {
-                    data = JSON.parse(text);
-                    console.log('Successfully parsed Fingrid API response');
-                } catch (parseError) {
-                    console.error('JSON parse error:', parseError);
-                    return NextResponse.json(
-                        {
-                            error: 'Failed to parse Fingrid API response as JSON',
-                            message: `Response was not valid JSON: ${text.substring(0, 100)}...`
-                        },
-                        { status: 502 }
-                    );
-                }
-
-                // Return the response
-                return NextResponse.json(data);
-            } catch (responseError) {
-                console.error('Error processing response from Fingrid API:', responseError);
-
-                return NextResponse.json(
-                    {
-                        error: 'Error processing response from Fingrid API',
-                        message: responseError instanceof Error ? responseError.message : 'Unknown error processing response'
-                    },
-                    { status: 502 }
-                );
-            }
-        } catch (fetchError) {
-            console.error('Fetch error when calling Fingrid API:', fetchError);
-
+        // Get API key with error handling
+        const apiKey = process.env.FINGRID_API_KEY || '';
+        if (!apiKey) {
+            console.error("Fingrid API key is missing");
             return NextResponse.json(
-                {
-                    error: 'Network error when calling Fingrid API',
-                    message: fetchError instanceof Error ? fetchError.message : 'Unknown network error'
-                },
-                { status: 503 }
+                { error: 'API key is not configured' },
+                { status: 500 }
             );
         }
-    } catch (error) {
-        // Catch all other errors and format as JSON
-        console.error('Unhandled error in Fingrid API route:', error);
 
-        return NextResponse.json(
-            {
-                error: 'Internal server error',
-                message: error instanceof Error ? error.message : 'Unknown error processing request'
+        // Build Fingrid API URL
+        const fingridUrl = `https://data.fingrid.fi/api/${originalPath}${queryParams}`;
+        console.log(`[API] Making request to Fingrid: ${originalPath}${queryParams}`);
+
+        // Make request to Fingrid API
+        const fingridResponse = await fetch(fingridUrl, {
+            headers: {
+                'x-api-key': apiKey,
+                'Accept': 'application/json',
+                'Cache-Control': 'no-cache'
             },
+        });
+
+        // Handle non-OK responses
+        if (!fingridResponse.ok) {
+            const errorText = await fingridResponse.text();
+            console.error(`Fingrid API error (${fingridResponse.status}):`, errorText);
+
+            // Handle rate limiting specifically
+            if (fingridResponse.status === 429) {
+                return NextResponse.json(
+                    { error: 'Rate limit exceeded', message: 'Too many requests to Fingrid API' },
+                    { status: 429 }
+                );
+            }
+
+            return NextResponse.json(
+                { error: `Fingrid API returned ${fingridResponse.status}`, message: errorText },
+                { status: fingridResponse.status }
+            );
+        }
+
+        // Parse response data
+        const responseText = await fingridResponse.text();
+        let data;
+
+        try {
+            data = JSON.parse(responseText);
+        } catch (e) {
+            console.error('Failed to parse Fingrid response as JSON');
+            return NextResponse.json(
+                { error: 'Invalid JSON response from Fingrid API' },
+                { status: 502 }
+            );
+        }
+
+        // Store in cache with timestamp
+        cache[cacheKey] = {
+            data,
+            timestamp: Date.now()
+        };
+
+        // Return successful response
+        return NextResponse.json(data);
+
+    } catch (error) {
+        console.error('Error in Fingrid API route:', error);
+        return NextResponse.json(
+            { error: 'Internal server error', message: error instanceof Error ? error.message : 'Unknown error' },
             { status: 500 }
         );
     }
