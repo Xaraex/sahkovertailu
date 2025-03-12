@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { Zap, Github, Mail } from 'lucide-react';
+import { Zap, Github, Linkedin } from 'lucide-react';
 
 export function Footer() {
     return (
@@ -29,7 +29,7 @@ export function Footer() {
 
                         <div className="flex gap-4">
                             <a
-                                href="https://github.com/yourusername/sahko-vertailu"
+                                href="https://github.com/xaraex/sahko-vertailu"
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="hover:text-primary transition-colors flex items-center gap-1"
@@ -38,11 +38,13 @@ export function Footer() {
                                 <span>GitHub</span>
                             </a>
                             <a
-                                href="mailto:info@sahkovertailu.fi"
+                                href="https://www.linkedin.com/in/janne-kolehmainen-832924341"
+                                target="_blank"
+                                rel="noopener noreferrer"
                                 className="hover:text-primary transition-colors flex items-center gap-1"
                             >
-                                <Mail size={16} />
-                                <span>Ota yhteyttä</span>
+                                <Linkedin size={16} />
+                                <span>LinkedIn</span>
                             </a>
                         </div>
                     </div>

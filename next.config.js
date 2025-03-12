@@ -9,15 +9,7 @@ const nextConfig = {
   env: {
     FINGRID_API_KEY: process.env.FINGRID_API_KEY,
   },
-  // Rewrites for CORS handling
-  async rewrites() {
-    return [
-      {
-        source: '/api/fingrid/:path*',
-        destination: 'https://data.fingrid.fi/api/:path*',
-      },
-    ];
-  },
+  // Remove rewrites section - we'll use our API route exclusively
 };
 
 module.exports = nextConfig;

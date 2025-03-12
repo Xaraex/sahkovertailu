@@ -1,6 +1,8 @@
 import { Metadata } from 'next';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { BookOpen, Code, Database, GitBranch, GitFork, LineChart, Zap } from 'lucide-react';
+import { BookOpen, Code, Database, GitBranch, GitFork, LineChart, Zap, Linkedin, Github } from 'lucide-react';
+import Link from 'next/link';
+import { Button } from '@/components/ui/button';
 
 export const metadata: Metadata = {
     title: 'Tietoa | SähköVertailu',
@@ -28,12 +30,12 @@ export default function AboutPage() {
                     </CardHeader>
                     <CardContent>
                         <p className="mb-4">
-                            SähköVertailu on web-sovellus, jonka tarkoituksena on auttaa suomalaisia sähkönkuluttajia
-                            vertailemaan spot-hintaisen sähkön ja kiinteähintaisten sopimusten kustannuksia omien kulutustietojen perusteella.
+                            SähköVertailu on portfolioprojekti, jonka tarkoituksena on visualisoida ja analysoida
+                            spot-hintaisen sähkön ja kiinteähintaisten sopimusten eroja suomalaisilla sähkömarkkinoilla.
                         </p>
                         <p>
-                            Sovellus tarjoaa visualisointeja, analyysejä ja suosituksia optimaalisista sähkösopimuksista
-                            huomioiden käyttäjän kulutusprofiilin ja sähkömarkkinoiden tilanteen.
+                            Sovellus tarjoaa visualisointeja ja analyysejä sähkön hintakehityksestä,
+                            tuotantojakaumasta ja kustannuksista erilaisten esimerkkikulutusprofiilien pohjalta.
                         </p>
                     </CardContent>
                 </Card>
@@ -50,15 +52,15 @@ export default function AboutPage() {
                         <ul className="space-y-2">
                             <li className="flex items-start">
                                 <span className="mr-2 mt-1">•</span>
-                                <span>Suomalaiset sähkönkuluttajat, jotka harkitsevat siirtymistä spot-hintaiseen sähkösopimukseen</span>
+                                <span>Sähkömarkkinoista kiinnostuneet datan visualisoinnin harrastajat</span>
                             </li>
                             <li className="flex items-start">
                                 <span className="mr-2 mt-1">•</span>
-                                <span>Nykyiset spot-hintaisen sähkön käyttäjät, jotka haluavat analysoida kustannuksiaan</span>
+                                <span>Nykyiset spot-hintaisen sähkön käyttäjät, jotka haluavat analysoida markkinatilannetta</span>
                             </li>
                             <li className="flex items-start">
                                 <span className="mr-2 mt-1">•</span>
-                                <span>Kuluttajat, jotka haluavat optimoida sähkönkäyttöään halvemmille tunneille</span>
+                                <span>Kuluttajat, jotka haluavat ymmärtää sähkömarkkinoiden toimintaa</span>
                             </li>
                             <li className="flex items-start">
                                 <span className="mr-2 mt-1">•</span>
@@ -139,7 +141,7 @@ export default function AboutPage() {
                             <ul className="space-y-2">
                                 <li className="flex items-start">
                                     <span className="mr-2 mt-1">•</span>
-                                    <span>Spot-hinnan vs. kiinteän hinnan kustannusvertailu</span>
+                                    <span>Spot-hinnan vs. kiinteän hinnan vertailu</span>
                                 </li>
                                 <li className="flex items-start">
                                     <span className="mr-2 mt-1">•</span>
@@ -151,11 +153,11 @@ export default function AboutPage() {
                                 </li>
                                 <li className="flex items-start">
                                     <span className="mr-2 mt-1">•</span>
-                                    <span>Säästöjen/lisäkustannusten visualisointi</span>
+                                    <span>Reaaliaikaisen datan käsittely</span>
                                 </li>
                                 <li className="flex items-start">
                                     <span className="mr-2 mt-1">•</span>
-                                    <span>Kulutuksen optimointisuositukset</span>
+                                    <span>Rate limiting ja välimuistinhallinta</span>
                                 </li>
                             </ul>
                         </div>
@@ -169,18 +171,34 @@ export default function AboutPage() {
                         <GitFork className="h-6 w-6 text-primary" />
                     </div>
                     <CardTitle>Tietoa tekijästä</CardTitle>
-                    <CardDescription>Projektin kehittäjä</CardDescription>
+                    <CardDescription>Portfolioprojekti</CardDescription>
                 </CardHeader>
                 <CardContent>
                     <p className="mb-4">
-                        SähköVertailu on osa henkilökohtaista portfoliotani, jolla osoitan osaamistani full-stack-kehittäjänä.
-                        Projektin tarkoituksena on demonstroida taitojani API-integraatioissa, datan käsittelyssä,
-                        visualisoinnissa sekä käyttöliittymäsuunnittelussa.
+                        SähköVertailu on <strong>Janne Kolehmaisen</strong> portfolioprojekti, joka demonstroi
+                        full-stack-kehitystaitoja, kuten API-integraatioita, datan visualisointia ja käsittelyä sekä
+                        käyttöliittymäsuunnittelua.
                     </p>
-                    <p>
-                        Sovellus on avoimesti saatavilla <a href="https://github.com/yourusername/sahko-vertailu" className="text-primary hover:underline">GitHubissa</a>,
-                        ja koodin arkkitehtuuri on suunniteltu skaalautuvaksi ja helposti ylläpidettäväksi.
+                    <p className="mb-6">
+                        Projektin koodirakenne on suunniteltu skaalautuvaksi ja ylläpidettäväksi,
+                        hyödyntäen moderneja web-teknologioita ja parhaita käytäntöjä.
                     </p>
+
+                    <div className="flex flex-wrap gap-4">
+                        <Button variant="outline" className="flex items-center gap-2" asChild>
+                            <Link href="https://github.com/xaraex/sahko-vertailu" target="_blank">
+                                <Github className="h-4 w-4" />
+                                GitHub Repository
+                            </Link>
+                        </Button>
+
+                        <Button variant="outline" className="flex items-center gap-2" asChild>
+                            <Link href="https://www.linkedin.com/in/janne-kolehmainen-832924341" target="_blank">
+                                <Linkedin className="h-4 w-4" />
+                                LinkedIn
+                            </Link>
+                        </Button>
+                    </div>
                 </CardContent>
             </Card>
         </div>

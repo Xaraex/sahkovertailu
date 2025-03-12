@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
-import './globals.css'; // Tähän tullaan lisäämään Tailwind CSS perustyyli
+import './globals.css';
 import { Navbar } from '@/components/layout/Navbar';
 import { Footer } from '@/components/layout/Footer';
 import { ThemeProvider } from '@/components/providers/ThemeProvider';
@@ -9,8 +9,8 @@ import { ThemeProvider } from '@/components/providers/ThemeProvider';
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: 'SähköVertailu - Suomalainen sähkön hintavertailu',
-  description: 'Vertaile spot-hintaista ja kiinteähintaista sähkösopimuksia Suomessa',
+  title: 'SähköVertailu - Sähkön hinnan visualisointi ja analyysi',
+  description: 'Visualisoi ja analysoi spot-hinnan ja kiinteän hinnan eroja Suomen sähkömarkkinoilla',
 };
 
 export default function RootLayout({
