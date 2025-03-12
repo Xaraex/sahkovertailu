@@ -3,14 +3,18 @@ const nextConfig = {
   reactStrictMode: true,
   swcMinify: true,
   images: {
-    domains: ['api.fingrid.fi'], // Jos tarvitsemme kuvia Fingridin API:sta
+    domains: ['api.fingrid.fi', 'data.fingrid.fi'], // If you need images from Fingrid's API
   },
-  // Tärkeää CORS-ongelmien välttämiseksi API-kutsuissa
+  // Added env configuration to make sure environment variables are available
+  env: {
+    FINGRID_API_KEY: process.env.FINGRID_API_KEY,
+  },
+  // Rewrites for CORS handling
   async rewrites() {
     return [
       {
         source: '/api/fingrid/:path*',
-        destination: 'https://api.fingrid.fi/v1/avoindata-api/:path*',
+        destination: 'https://data.fingrid.fi/api/:path*',
       },
     ];
   },

@@ -1,5 +1,6 @@
 import { Metadata } from 'next';
 import ApiTest from '@/components/ApiTest';
+import MinimalApiTest from '@/components/MinimalApiTest';
 import { Activity, BarChart3, Cpu, Wind, Zap } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
@@ -16,6 +17,14 @@ export default function DashboardPage() {
                 <p className="text-lg text-center text-muted-foreground">
                     Tarkastele reaaliaikaisia tietoja Suomen sähkömarkkinoista, hinnoista ja tuotannosta.
                 </p>
+            </div>
+
+            {/* Minimal API Test Component to debug connection issues */}
+            <div className="mb-8">
+                <h2 className="text-2xl font-bold mb-4">API-yhteyden testeri</h2>
+                <div className="flex justify-center">
+                    <MinimalApiTest />
+                </div>
             </div>
 
             {/* Info Cards */}
@@ -116,7 +125,7 @@ export default function DashboardPage() {
                 </Card>
             </div>
 
-            {/* API Test Component */}
+            {/* Full API Test Component */}
             <div className="mt-8 border-t pt-8">
                 <h2 className="text-2xl font-bold mb-6">Fingrid API-tiedot</h2>
                 <p className="mb-6 text-muted-foreground">

@@ -2,13 +2,13 @@
 
 import { useState, useEffect } from 'react';
 import { fetchConsumption, fetchProduction, fetchCO2EmissionsConsumption, fetchUpRegulationPrice } from '@/lib/api/fingrid';
-import { TimeWindow, FingridDataPoint } from '@/lib/constants/datasets';
+import { TimeWindow, FingridDataPoint, FingridResponse } from '@/lib/constants/datasets';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { formatDate } from '@/lib/utils/date';
 import { calculateAveragePrice, formatPrice, formatPricePerKwh } from '@/lib/utils/price';
-import { Zap, Activity, AlertCircle, RefreshCw, Wind, Cpu } from 'lucide-react';
+import { Zap, Activity, AlertCircle, RefreshCw, Wind, Cpu, Info, Clock } from 'lucide-react';
 
 export default function ApiTest() {
     const [loading, setLoading] = useState(false);
@@ -18,30 +18,88 @@ export default function ApiTest() {
     const [co2Emissions, setCo2Emissions] = useState<FingridDataPoint[]>([]);
     const [regulationPrice, setRegulationPrice] = useState<FingridDataPoint[]>([]);
     const [timeWindow, setTimeWindow] = useState<TimeWindow>(TimeWindow.DAY);
+    const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+    const [rateInfo, setRateInfo] = useState<string | null>(null);
+
+    // Fetch a single dataset with rate limit handling
+    const fetchDataset = async (
+        fetchFunction: () => Promise<FingridResponse>,
+        setter: (data: FingridDataPoint[]) => void,
+        datasetName: string
+    ) => {
+        try {
+            const response = await fetchFunction();
+            console.log(`Successfully fetched ${datasetName} data`);
+            setter(response.data || []);
+            return true;
+        } catch (err) {
+            console.error(`Error fetching ${datasetName} data:`, err);
+
+            // Check for rate limit error
+            const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+            if (errorMessage.includes('429') || errorMessage.includes('rate limit')) {
+                setRateInfo(`Rate limit exceeded, some data may be unavailable`);
+                // Don't set error, just return false to indicate failure
+                return false;
+            }
+
+            return false;
+        }
+    };
 
     const fetchData = async () => {
         setLoading(true);
         setError(null);
+        setRateInfo(null);
 
         try {
-            // Fetch consumption data
-            const consumptionData = await fetchConsumption(timeWindow);
-            setConsumption(consumptionData.data);
+            // Fetch data sequentially to avoid rate limits
+            let success = true;
 
-            // Fetch production data
-            const productionData = await fetchProduction(timeWindow);
-            setProduction(productionData.data);
+            // Try to fetch all datasets, but don't fail completely if one fails
+            const consumptionSuccess = await fetchDataset(
+                () => fetchConsumption(timeWindow),
+                setConsumption,
+                'consumption'
+            );
+            success = success && consumptionSuccess;
 
-            // Fetch CO2 emissions data
-            const co2Data = await fetchCO2EmissionsConsumption(timeWindow);
-            setCo2Emissions(co2Data.data);
+            // Wait a bit between requests to avoid rate limits
+            await new Promise(resolve => setTimeout(resolve, 500));
 
-            // Fetch regulation price data
-            const priceData = await fetchUpRegulationPrice(timeWindow);
-            setRegulationPrice(priceData.data);
+            const productionSuccess = await fetchDataset(
+                () => fetchProduction(timeWindow),
+                setProduction,
+                'production'
+            );
+            success = success && productionSuccess;
 
+            await new Promise(resolve => setTimeout(resolve, 500));
+
+            const co2Success = await fetchDataset(
+                () => fetchCO2EmissionsConsumption(timeWindow),
+                setCo2Emissions,
+                'CO2 emissions'
+            );
+            success = success && co2Success;
+
+            await new Promise(resolve => setTimeout(resolve, 500));
+
+            const priceSuccess = await fetchDataset(
+                () => fetchUpRegulationPrice(timeWindow),
+                setRegulationPrice,
+                'regulation price'
+            );
+            success = success && priceSuccess;
+
+            if (!success && !rateInfo) {
+                setRateInfo('Some data could not be fetched due to API rate limits. Try again later.');
+            }
+
+            // Set last updated timestamp
+            setLastUpdated(new Date());
         } catch (err) {
-            console.error('Error fetching data:', err);
+            console.error('Error in fetchData:', err);
             setError(err instanceof Error ? err.message : 'Tuntematon virhe tapahtui');
         } finally {
             setLoading(false);
@@ -76,12 +134,55 @@ export default function ApiTest() {
                         disabled={loading}
                         className="flex items-center gap-1"
                     >
-                        <RefreshCw className="h-4 w-4" />
-                        {loading ? 'Ladataan...' : 'Päivitä'}
+                        {loading ? (
+                            <>
+                                <RefreshCw className="h-4 w-4 animate-spin" />
+                                Ladataan...
+                            </>
+                        ) : (
+                            <>
+                                <RefreshCw className="h-4 w-4" />
+                                Päivitä
+                            </>
+                        )}
                     </Button>
                 </div>
+
+                {lastUpdated && (
+                    <div className="flex items-center text-xs text-muted-foreground mt-1">
+                        <Clock className="h-3 w-3 mr-1" />
+                        Päivitetty: {lastUpdated.toLocaleTimeString('fi-FI')}
+                    </div>
+                )}
             </CardHeader>
             <CardContent>
+                {/* Rate Limit Warning */}
+                {rateInfo && (
+                    <div className="bg-amber-50 dark:bg-amber-900/20 p-4 rounded-md mb-4 flex items-start">
+                        <Info className="h-5 w-5 text-amber-600 dark:text-amber-400 mr-2 mt-0.5 flex-shrink-0" />
+                        <div>
+                            <p className="text-sm text-amber-800 dark:text-amber-300">{rateInfo}</p>
+                            <p className="text-xs text-amber-700 dark:text-amber-400 mt-1">
+                                Fingrid API-avaimesi sallii 10 pyyntöä minuutissa. Odota hetki ja kokeile uudelleen.
+                            </p>
+                        </div>
+                    </div>
+                )}
+
+                {/* Error Message */}
+                {error && (
+                    <div className="text-destructive p-6 rounded-md bg-destructive/10 border border-destructive/20 flex items-start mb-4">
+                        <AlertCircle className="h-5 w-5 mr-2 mt-0.5 flex-shrink-0" />
+                        <div>
+                            <h3 className="font-medium">Virhe tietojen haussa</h3>
+                            <p className="text-sm mt-1">{error}</p>
+                            <p className="text-sm mt-2 text-muted-foreground">
+                                Tarkista, että API-avain on asetettu oikein .env.local-tiedostossa
+                            </p>
+                        </div>
+                    </div>
+                )}
+
                 <Tabs defaultValue={timeWindow} onValueChange={(value) => setTimeWindow(value as TimeWindow)}>
                     <TabsList className="w-full grid grid-cols-3 mb-4">
                         <TabsTrigger value={TimeWindow.DAY}>Päivä</TabsTrigger>
@@ -95,17 +196,6 @@ export default function ApiTest() {
                                 <div className="animate-spin h-6 w-6 border-4 border-primary border-t-transparent rounded-full mx-auto"></div>
                                 <p className="text-muted-foreground">Ladataan tietoja Fingrid API:sta...</p>
                             </div>
-                        ) : error ? (
-                            <div className="text-destructive p-6 rounded-md bg-destructive/10 border border-destructive/20 flex items-start">
-                                <AlertCircle className="h-5 w-5 mr-2 mt-0.5 flex-shrink-0" />
-                                <div>
-                                    <h3 className="font-medium">Virhe tietojen haussa</h3>
-                                    <p className="text-sm mt-1">{error}</p>
-                                    <p className="text-sm mt-2 text-muted-foreground">
-                                        Tarkista, että API-avain on asetettu oikein .env.local-tiedostossa
-                                    </p>
-                                </div>
-                            </div>
                         ) : (
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 <div className="bg-card rounded-lg border p-4">
@@ -113,7 +203,7 @@ export default function ApiTest() {
                                         <Zap className="h-5 w-5 text-primary" />
                                         <h3 className="font-medium">Sähkön kulutus</h3>
                                     </div>
-                                    {consumption.length > 0 ? (
+                                    {consumption && consumption.length > 0 ? (
                                         <div>
                                             <p className="text-sm mb-1 text-muted-foreground">Datapisteiden määrä: {consumption.length}</p>
                                             <div className="mt-3 space-y-1">
@@ -137,7 +227,7 @@ export default function ApiTest() {
                                         <Cpu className="h-5 w-5 text-primary" />
                                         <h3 className="font-medium">Sähkön tuotanto</h3>
                                     </div>
-                                    {production.length > 0 ? (
+                                    {production && production.length > 0 ? (
                                         <div>
                                             <p className="text-sm mb-1 text-muted-foreground">Datapisteiden määrä: {production.length}</p>
                                             <div className="mt-3 space-y-1">
@@ -161,7 +251,7 @@ export default function ApiTest() {
                                         <Wind className="h-5 w-5 text-primary" />
                                         <h3 className="font-medium">CO2-päästökerroin</h3>
                                     </div>
-                                    {co2Emissions.length > 0 ? (
+                                    {co2Emissions && co2Emissions.length > 0 ? (
                                         <div>
                                             <p className="text-sm mb-1 text-muted-foreground">Datapisteiden määrä: {co2Emissions.length}</p>
                                             <div className="mt-3 space-y-1">
@@ -185,7 +275,7 @@ export default function ApiTest() {
                                         <Activity className="h-5 w-5 text-primary" />
                                         <h3 className="font-medium">Säätösähkön ylössäätöhinta</h3>
                                     </div>
-                                    {regulationPrice.length > 0 ? (
+                                    {regulationPrice && regulationPrice.length > 0 ? (
                                         <div>
                                             <p className="text-sm mb-1 text-muted-foreground">Datapisteiden määrä: {regulationPrice.length}</p>
                                             <div className="mt-3 space-y-1">
