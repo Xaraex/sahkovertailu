@@ -9,8 +9,9 @@ export async function GET(
         const apiKey = process.env.FINGRID_API_KEY;
 
         if (!apiKey) {
+            console.error("Fingrid API key is missing from environment variables");
             return NextResponse.json(
-                { error: 'API key is not configured' },
+                { error: 'API key is not configured on the server' },
                 { status: 500 }
             );
         }
@@ -18,6 +19,9 @@ export async function GET(
         // Get query parameters from the incoming request
         const url = new URL(request.url);
         const queryParams = url.search;
+
+        // Log for debugging (these logs are only visible on the server)
+        console.log(`Making request to Fingrid API: /variable/${path}${queryParams}`);
 
         // Make request to Fingrid API
         const fingridResponse = await fetch(
@@ -30,9 +34,11 @@ export async function GET(
             }
         );
 
-        // If the response wasn't ok, throw an error
+        // If the response wasn't ok, return the error
         if (!fingridResponse.ok) {
             const errorText = await fingridResponse.text();
+            console.error(`Fingrid API error (${fingridResponse.status}): ${errorText}`);
+
             return NextResponse.json(
                 {
                     error: 'Failed to fetch data from Fingrid API',
@@ -46,18 +52,12 @@ export async function GET(
         // Get the data from the response
         const data = await fingridResponse.json();
 
-        // Return the response with appropriate CORS headers
-        return NextResponse.json(data, {
-            headers: {
-                'Access-Control-Allow-Origin': '*',
-                'Access-Control-Allow-Methods': 'GET, OPTIONS',
-                'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-            },
-        });
+        // Return the response
+        return NextResponse.json(data);
     } catch (error) {
         console.error('Error in Fingrid API route:', error);
         return NextResponse.json(
-            { error: 'Internal server error' },
+            { error: 'Internal server error', message: error instanceof Error ? error.message : 'Unknown error' },
             { status: 500 }
         );
     }

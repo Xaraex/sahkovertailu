@@ -2,6 +2,8 @@ import { FINGRID_DATASETS, FingridResponse, TimeWindow } from '@/lib/constants/d
 
 /**
  * Generate ISO format date strings for API queries
+ * @param window - Time window for the query
+ * @returns Object with startTime and endTime as ISO strings
  */
 export const getTimeRange = (window: TimeWindow): { startTime: string, endTime: string } => {
     const now = new Date();
@@ -40,7 +42,7 @@ export const getTimeRange = (window: TimeWindow): { startTime: string, endTime: 
 };
 
 /**
- * Fetch data from Fingrid avoindata-api
+ * Fetch data from Fingrid API via our Next.js API route
  * @param datasetId - The ID of the dataset to fetch
  * @param timeWindow - The time window to fetch data for
  * @returns Promise with the Fingrid API response
@@ -49,28 +51,18 @@ export const fetchFingridData = async (
     datasetId: number,
     timeWindow: TimeWindow = TimeWindow.DAY
 ): Promise<FingridResponse> => {
-    const apiKey = process.env.FINGRID_API_KEY;
-
-    if (!apiKey) {
-        throw new Error('Fingrid API key is not defined in environment variables');
-    }
-
     const { startTime, endTime } = getTimeRange(timeWindow);
 
     try {
-        // Käytämme Next.js API-reittiä CORS-ongelmien välttämiseksi
+        // Use Next.js API route which handles the API key on the server side
         const response = await fetch(
-            `/api/fingrid/variable/${datasetId}?start_time=${startTime}&end_time=${endTime}`,
-            {
-                headers: {
-                    'x-api-key': apiKey,
-                    'Accept': 'application/json',
-                },
-            }
+            `/api/fingrid/variable/${datasetId}?start_time=${startTime}&end_time=${endTime}`
         );
 
         if (!response.ok) {
-            throw new Error(`Fingrid API error: ${response.status} ${response.statusText}`);
+            const errorData = await response.json().catch(() => null);
+            const errorMessage = errorData?.error || `HTTP error: ${response.status} ${response.statusText}`;
+            throw new Error(errorMessage);
         }
 
         const data: FingridResponse = await response.json();
@@ -83,6 +75,8 @@ export const fetchFingridData = async (
 
 /**
  * Helper function to fetch electricity consumption data
+ * @param timeWindow - Time window for the query
+ * @returns Promise with consumption data
  */
 export const fetchConsumption = (timeWindow: TimeWindow = TimeWindow.DAY) => {
     return fetchFingridData(FINGRID_DATASETS.CONSUMPTION.id, timeWindow);
@@ -90,6 +84,8 @@ export const fetchConsumption = (timeWindow: TimeWindow = TimeWindow.DAY) => {
 
 /**
  * Helper function to fetch electricity production data
+ * @param timeWindow - Time window for the query
+ * @returns Promise with production data
  */
 export const fetchProduction = (timeWindow: TimeWindow = TimeWindow.DAY) => {
     return fetchFingridData(FINGRID_DATASETS.PRODUCTION.id, timeWindow);
@@ -97,6 +93,8 @@ export const fetchProduction = (timeWindow: TimeWindow = TimeWindow.DAY) => {
 
 /**
  * Helper function to fetch regulation price data
+ * @param timeWindow - Time window for the query
+ * @returns Promise with regulation price data
  */
 export const fetchUpRegulationPrice = (timeWindow: TimeWindow = TimeWindow.DAY) => {
     return fetchFingridData(FINGRID_DATASETS.UP_REGULATION_PRICE.id, timeWindow);
@@ -104,6 +102,8 @@ export const fetchUpRegulationPrice = (timeWindow: TimeWindow = TimeWindow.DAY) 
 
 /**
  * Helper function to fetch CO2 emission data for consumption
+ * @param timeWindow - Time window for the query
+ * @returns Promise with CO2 emissions data
  */
 export const fetchCO2EmissionsConsumption = (timeWindow: TimeWindow = TimeWindow.DAY) => {
     return fetchFingridData(FINGRID_DATASETS.CO2_EMISSIONS_CONSUMPTION.id, timeWindow);
@@ -111,7 +111,8 @@ export const fetchCO2EmissionsConsumption = (timeWindow: TimeWindow = TimeWindow
 
 /**
  * Helper function to fetch data for production mix
- * Returns a combined dataset with production by source
+ * @param timeWindow - Time window for the query
+ * @returns Combined dataset with production by source
  */
 export const fetchProductionMix = async (timeWindow: TimeWindow = TimeWindow.DAY) => {
     try {
@@ -123,8 +124,7 @@ export const fetchProductionMix = async (timeWindow: TimeWindow = TimeWindow.DAY
             fetchFingridData(FINGRID_DATASETS.DISTRICT_HEATING_CHP.id, timeWindow),
         ]);
 
-        // This is just the raw data - in a real application, you'd want to process
-        // this data to align timestamps and create a unified dataset
+        // Return combined data from different sources
         return {
             nuclear: nuclear.data,
             hydro: hydro.data,

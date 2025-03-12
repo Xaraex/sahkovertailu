@@ -1,3 +1,14 @@
 {
-    "git.ignoreLimitWarning": true
+    "git.ignoreLimitWarning": true,
+    "css.validate": false,
+    "scss.validate": false,
+    "tailwindCSS.includeLanguages": {
+        "javascript": "javascript",
+        "typescript": "typescript",
+        "javascriptreact": "javascriptreact",
+        "typescriptreact": "typescriptreact"
+    },
+    "editor.quickSuggestions": {
+        "strings": true
+    }
 }

@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { formatDate } from '@/lib/utils/date';
 import { calculateAveragePrice, formatPrice, formatPricePerKwh } from '@/lib/utils/price';
+import { Zap, Activity, AlertCircle, RefreshCw, Wind, Cpu } from 'lucide-react';
 
 export default function ApiTest() {
     const [loading, setLoading] = useState(false);
@@ -61,14 +62,28 @@ export default function ApiTest() {
     return (
         <Card className="w-full max-w-4xl mx-auto">
             <CardHeader>
-                <CardTitle>Fingrid API-testi</CardTitle>
-                <CardDescription>
-                    Testaa yhteyttä Fingrid-rajapintaan ja datan hakua
-                </CardDescription>
+                <div className="flex justify-between items-center">
+                    <div>
+                        <CardTitle>Fingrid API-tiedot</CardTitle>
+                        <CardDescription>
+                            Reaaliaikainen sähködata Fingrid API:sta
+                        </CardDescription>
+                    </div>
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleRefresh}
+                        disabled={loading}
+                        className="flex items-center gap-1"
+                    >
+                        <RefreshCw className="h-4 w-4" />
+                        {loading ? 'Ladataan...' : 'Päivitä'}
+                    </Button>
+                </div>
             </CardHeader>
             <CardContent>
                 <Tabs defaultValue={timeWindow} onValueChange={(value) => setTimeWindow(value as TimeWindow)}>
-                    <TabsList>
+                    <TabsList className="w-full grid grid-cols-3 mb-4">
                         <TabsTrigger value={TimeWindow.DAY}>Päivä</TabsTrigger>
                         <TabsTrigger value={TimeWindow.WEEK}>Viikko</TabsTrigger>
                         <TabsTrigger value={TimeWindow.MONTH}>Kuukausi</TabsTrigger>
@@ -76,59 +91,121 @@ export default function ApiTest() {
 
                     <div className="mt-4">
                         {loading ? (
-                            <div className="text-center p-4">Ladataan tietoja...</div>
+                            <div className="text-center p-8 space-y-2">
+                                <div className="animate-spin h-6 w-6 border-4 border-primary border-t-transparent rounded-full mx-auto"></div>
+                                <p className="text-muted-foreground">Ladataan tietoja Fingrid API:sta...</p>
+                            </div>
                         ) : error ? (
-                            <div className="text-red-500 p-4 border border-red-300 rounded-md">
-                                <h3 className="font-bold">Virhe</h3>
-                                <p>{error}</p>
-                                <p className="text-sm mt-2">
-                                    Tarkista, että API-avain on asetettu oikein .env.local-tiedostossa
-                                </p>
+                            <div className="text-destructive p-6 rounded-md bg-destructive/10 border border-destructive/20 flex items-start">
+                                <AlertCircle className="h-5 w-5 mr-2 mt-0.5 flex-shrink-0" />
+                                <div>
+                                    <h3 className="font-medium">Virhe tietojen haussa</h3>
+                                    <p className="text-sm mt-1">{error}</p>
+                                    <p className="text-sm mt-2 text-muted-foreground">
+                                        Tarkista, että API-avain on asetettu oikein .env.local-tiedostossa
+                                    </p>
+                                </div>
                             </div>
                         ) : (
-                            <div className="space-y-6">
-                                <div>
-                                    <h3 className="font-medium mb-2">Sähkön kulutus</h3>
-                                    <p>Datapisteiden määrä: {consumption.length}</p>
-                                    {consumption.length > 0 && (
-                                        <div className="mt-2">
-                                            <p>Viimeisin kulutus: {consumption[consumption.length - 1].value} MW</p>
-                                            <p>Aikaleima: {formatDate(consumption[consumption.length - 1].start_time)}</p>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div className="bg-card rounded-lg border p-4">
+                                    <div className="flex items-center gap-2 mb-3">
+                                        <Zap className="h-5 w-5 text-primary" />
+                                        <h3 className="font-medium">Sähkön kulutus</h3>
+                                    </div>
+                                    {consumption.length > 0 ? (
+                                        <div>
+                                            <p className="text-sm mb-1 text-muted-foreground">Datapisteiden määrä: {consumption.length}</p>
+                                            <div className="mt-3 space-y-1">
+                                                <p className="font-medium">Viimeisin kulutus:
+                                                    <span className="ml-2 text-energy-blue-600 dark:text-energy-blue-400 font-bold">
+                                                        {consumption[consumption.length - 1].value.toLocaleString('fi-FI')} MW
+                                                    </span>
+                                                </p>
+                                                <p className="text-sm text-muted-foreground">
+                                                    {formatDate(consumption[consumption.length - 1].start_time)}
+                                                </p>
+                                            </div>
                                         </div>
+                                    ) : (
+                                        <p className="text-muted-foreground">Ei dataa saatavilla</p>
                                     )}
                                 </div>
 
-                                <div>
-                                    <h3 className="font-medium mb-2">Sähkön tuotanto</h3>
-                                    <p>Datapisteiden määrä: {production.length}</p>
-                                    {production.length > 0 && (
-                                        <div className="mt-2">
-                                            <p>Viimeisin tuotanto: {production[production.length - 1].value} MW</p>
-                                            <p>Aikaleima: {formatDate(production[production.length - 1].start_time)}</p>
+                                <div className="bg-card rounded-lg border p-4">
+                                    <div className="flex items-center gap-2 mb-3">
+                                        <Cpu className="h-5 w-5 text-primary" />
+                                        <h3 className="font-medium">Sähkön tuotanto</h3>
+                                    </div>
+                                    {production.length > 0 ? (
+                                        <div>
+                                            <p className="text-sm mb-1 text-muted-foreground">Datapisteiden määrä: {production.length}</p>
+                                            <div className="mt-3 space-y-1">
+                                                <p className="font-medium">Viimeisin tuotanto:
+                                                    <span className="ml-2 text-energy-green-600 dark:text-energy-green-400 font-bold">
+                                                        {production[production.length - 1].value.toLocaleString('fi-FI')} MW
+                                                    </span>
+                                                </p>
+                                                <p className="text-sm text-muted-foreground">
+                                                    {formatDate(production[production.length - 1].start_time)}
+                                                </p>
+                                            </div>
                                         </div>
+                                    ) : (
+                                        <p className="text-muted-foreground">Ei dataa saatavilla</p>
                                     )}
                                 </div>
 
-                                <div>
-                                    <h3 className="font-medium mb-2">CO2-päästökerroin</h3>
-                                    <p>Datapisteiden määrä: {co2Emissions.length}</p>
-                                    {co2Emissions.length > 0 && (
-                                        <div className="mt-2">
-                                            <p>Viimeisin arvo: {co2Emissions[co2Emissions.length - 1].value} gCO2/kWh</p>
-                                            <p>Aikaleima: {formatDate(co2Emissions[co2Emissions.length - 1].start_time)}</p>
+                                <div className="bg-card rounded-lg border p-4">
+                                    <div className="flex items-center gap-2 mb-3">
+                                        <Wind className="h-5 w-5 text-primary" />
+                                        <h3 className="font-medium">CO2-päästökerroin</h3>
+                                    </div>
+                                    {co2Emissions.length > 0 ? (
+                                        <div>
+                                            <p className="text-sm mb-1 text-muted-foreground">Datapisteiden määrä: {co2Emissions.length}</p>
+                                            <div className="mt-3 space-y-1">
+                                                <p className="font-medium">Viimeisin arvo:
+                                                    <span className="ml-2 text-energy-green-600 dark:text-energy-green-400 font-bold">
+                                                        {co2Emissions[co2Emissions.length - 1].value.toLocaleString('fi-FI')} gCO2/kWh
+                                                    </span>
+                                                </p>
+                                                <p className="text-sm text-muted-foreground">
+                                                    {formatDate(co2Emissions[co2Emissions.length - 1].start_time)}
+                                                </p>
+                                            </div>
                                         </div>
+                                    ) : (
+                                        <p className="text-muted-foreground">Ei dataa saatavilla</p>
                                     )}
                                 </div>
 
-                                <div>
-                                    <h3 className="font-medium mb-2">Säätösähkön ylössäätöhinta</h3>
-                                    <p>Datapisteiden määrä: {regulationPrice.length}</p>
-                                    {regulationPrice.length > 0 && (
-                                        <div className="mt-2">
-                                            <p>Viimeisin hinta: {formatPricePerKwh(regulationPrice[regulationPrice.length - 1].value)}</p>
-                                            <p>Keskihinta: {formatPricePerKwh(averagePrice)}</p>
-                                            <p>Aikaleima: {formatDate(regulationPrice[regulationPrice.length - 1].start_time)}</p>
+                                <div className="bg-card rounded-lg border p-4">
+                                    <div className="flex items-center gap-2 mb-3">
+                                        <Activity className="h-5 w-5 text-primary" />
+                                        <h3 className="font-medium">Säätösähkön ylössäätöhinta</h3>
+                                    </div>
+                                    {regulationPrice.length > 0 ? (
+                                        <div>
+                                            <p className="text-sm mb-1 text-muted-foreground">Datapisteiden määrä: {regulationPrice.length}</p>
+                                            <div className="mt-3 space-y-1">
+                                                <p className="font-medium">Viimeisin hinta:
+                                                    <span className="ml-2 text-energy-blue-600 dark:text-energy-blue-400 font-bold">
+                                                        {formatPricePerKwh(regulationPrice[regulationPrice.length - 1].value)}
+                                                    </span>
+                                                </p>
+                                                <p className="font-medium">Keskihinta:
+                                                    <span className="ml-2 text-energy-blue-600 dark:text-energy-blue-400 font-bold">
+                                                        {formatPricePerKwh(averagePrice)}
+                                                    </span>
+                                                </p>
+                                                <p className="text-sm text-muted-foreground">
+                                                    {formatDate(regulationPrice[regulationPrice.length - 1].start_time)}
+                                                </p>
+                                            </div>
                                         </div>
+                                    ) : (
+                                        <p className="text-muted-foreground">Ei dataa saatavilla</p>
                                     )}
                                 </div>
                             </div>
@@ -136,11 +213,6 @@ export default function ApiTest() {
                     </div>
                 </Tabs>
             </CardContent>
-            <CardFooter>
-                <Button onClick={handleRefresh} disabled={loading}>
-                    {loading ? 'Ladataan...' : 'Päivitä tiedot'}
-                </Button>
-            </CardFooter>
         </Card>
     );
 }
